@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acme Robotics — Multi-Site Fleet Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #1f2235; --border: #2e3148;
+      --text: #e4e6f0; --muted: #7a7f9a; --accent: #5b6af0;
+      --green: #34d399; --red: #f87171; --yellow: #fbbf24;
+      --blue: #60a5fa; --purple: #c084fc; --orange: #fb923c; --teal: #2dd4bf;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    /* ── Header ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .hdr-left  { display: flex; align-items: center; gap: 12px; }
+    .hdr-right { display: flex; align-items: center; gap: 10px; }
+    header h1  { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    .badge-sandbox { background: #2a1f5e; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+    .user-select { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 5px 10px; font-size: 12px; outline: none; cursor: pointer; }
+    .user-label { font-size: 11px; color: var(--muted); }
+    .export-btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .export-btn:hover { opacity: .88; }
+
+    /* ── KPI bar ── */
+    .kpi-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+    .kpi-tile { background: var(--surface); padding: 14px 20px; }
+    .kpi-label { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 6px; }
+    .kpi-value { font-size: 26px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+    .kpi-sub   { font-size: 11px; color: var(--muted); }
+    .kv-green  { color: var(--green);  }
+    .kv-yellow { color: var(--yellow); }
+    .kv-red    { color: var(--red);    }
+    .kv-blue   { color: var(--blue);   }
+
+    /* ── Toolbar ── */
+    .toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--surface); }
+    .toolbar-label { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .5px; }
+    .filter-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); padding: 5px 12px; font-size: 12px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+    .filter-btn.active { background: #1e2040; border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+    .search-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 5px 10px; font-size: 12px; outline: none; width: 180px; }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--muted); }
+
+    /* ── Incident banner ── */
+    .incident-banner { background: #2d1515; border-bottom: 1px solid var(--red); padding: 8px 20px; font-size: 12px; color: var(--red); display: flex; align-items: center; gap: 10px; }
+    .incident-banner b { font-weight: 700; }
+    .incident-banner.hidden { display: none; }
+
+    /* ── Grid ── */
+    .sites-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; padding: 16px 20px; }
+
+    /* ── Site card ── */
+    .site-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; transition: border-color .15s, transform .1s; cursor: pointer; }
+    .site-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .site-card.status-incident { border-color: var(--red); }
+    .site-card.status-atrisk   { border-color: var(--yellow); }
+    .site-card.status-healthy  { }
+    .site-card.status-offline  { border-color: var(--muted); opacity: .75; }
+
+    .card-status-bar { height: 3px; width: 100%; }
+    .bar-incident { background: var(--red);    }
+    .bar-atrisk   { background: var(--yellow); }
+    .bar-healthy  { background: var(--green);  }
+    .bar-offline  { background: var(--muted);  }
+
+    .card-body  { padding: 14px; }
+    .card-top   { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+    .card-name  { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+    .card-loc   { font-size: 11px; color: var(--muted); }
+    .status-pill { font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 3px 9px; border-radius: 4px; flex-shrink: 0; }
+    .pill-incident { background: #2d1515; color: var(--red);    border: 1px solid var(--red);    }
+    .pill-atrisk   { background: #2d2010; color: var(--yellow); border: 1px solid var(--yellow); }
+    .pill-healthy  { background: #152820; color: var(--green);  border: 1px solid var(--green);  }
+    .pill-offline  { background: #1e1e2a; color: var(--muted);  border: 1px solid var(--muted);  }
+
+    .card-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .metric { background: var(--surface2); border-radius: 6px; padding: 8px 10px; }
+    .metric-label { font-size: 10px; color: var(--muted); font-weight: 700; letter-spacing: .4px; text-transform: uppercase; margin-bottom: 3px; }
+    .metric-value { font-size: 18px; font-weight: 700; line-height: 1; }
+
+    .card-incidents { background: #2d1515; border: 1px solid #4a2020; border-radius: 6px; padding: 7px 10px; margin-bottom: 10px; font-size: 12px; color: var(--red); }
+    .card-incidents b { font-weight: 700; }
+
+    .card-atrisk-note { background: #2d2010; border: 1px solid #4a3a10; border-radius: 6px; padding: 7px 10px; margin-bottom: 10px; font-size: 12px; color: var(--yellow); }
+
+    .card-footer { display: flex; align-items: center; justify-content: space-between; }
+    .card-updated { font-size: 10px; color: var(--muted); }
+    .view-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .view-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 13px; line-height: 1.8; grid-column: 1/-1; }
+    .empty-icon { font-size: 32px; margin-bottom: 10px; }
+
+    /* ── Drill-down overlay ── */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 100; display: flex; align-items: flex-start; justify-content: flex-end; opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+    .drawer { width: 520px; max-width: 100vw; height: 100vh; background: var(--bg); border-left: 1px solid var(--border); overflow-y: auto; transform: translateX(100%); transition: transform .25s ease; display: flex; flex-direction: column; }
+    .overlay.open .drawer { transform: translateX(0); }
+    .drawer-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 1; }
+    .drawer-title  { font-weight: 700; font-size: 15px; }
+    .drawer-close  { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; }
+    .drawer-close:hover { color: var(--text); }
+    .drawer-body   { padding: 16px; flex: 1; }
+    .section-title { font-size: 11px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; margin-top: 18px; }
+    .section-title:first-child { margin-top: 0; }
+    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+    .kpi-mini { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; }
+    .kpi-mini .kpi-label { font-size: 10px; margin-bottom: 4px; }
+    .kpi-mini .kpi-value { font-size: 20px; }
+
+    /* Robot table */
+    .robot-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .robot-table th { text-align: left; font-size: 10px; font-weight: 700; letter-spacing: .5px; color: var(--muted); text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    .robot-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .robot-table tr:last-child td { border-bottom: none; }
+    .robot-table tr:hover td { background: var(--surface2); }
+    .robot-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dot-online      { background: var(--green);  }
+    .dot-offline     { background: var(--muted);  }
+    .dot-incident    { background: var(--red); animation: pulse-dot 1.2s ease-in-out infinite; }
+    .dot-maintenance { background: var(--yellow); }
+    @keyframes pulse-dot { 0%,100%{opacity:1}50%{opacity:.3} }
+
+    /* Incident log */
+    .incident-log-entry { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+    .inc-top  { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
+    .inc-type { font-size: 11px; font-weight: 700; color: var(--red); }
+    .inc-time { font-size: 10px; color: var(--muted); }
+    .inc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .inc-severity { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 3px; }
+    .sev-high   { background: #2d1515; color: var(--red);    border: 1px solid var(--red);    }
+    .sev-medium { background: #2d2010; color: var(--yellow); border: 1px solid var(--yellow); }
+
+    /* Export toast */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface); border: 1px solid var(--green); border-radius: 8px; padding: 10px 20px; font-size: 13px; color: var(--green); font-weight: 600; z-index: 200; transition: transform .3s ease; pointer-events: none; }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="hdr-left">
+    <h1>🤖 Acme Robotics — Multi-Site Fleet Dashboard</h1>
+    <span class="badge-sandbox">SANDBOX · DO NOT MERGE</span>
+  </div>
+  <div class="hdr-right">
+    <span class="user-label">Viewing as:</span>
+    <select class="user-select" id="user-select" onchange="onUserChange()">
+      <option value="admin">👑 Admin (all sites)</option>
+      <option value="pacific">Pacific Warehousing Operator</option>
+      <option value="meridian">Meridian Logistics Operator</option>
+    </select>
+    <button class="export-btn" onclick="exportCSV()">⬇ Export Shift Report</button>
+  </div>
+</header>
+
+<!-- ── KPI bar ── -->
+<div class="kpi-bar" id="kpi-bar"></div>
+
+<!-- ── Incident banner ── -->
+<div class="incident-banner hidden" id="incident-banner"></div>
+
+<!-- ── Toolbar ── -->
+<div class="toolbar">
+  <span class="toolbar-label">FILTER:</span>
+  <button class="filter-btn active" data-filter="all"      onclick="setFilter('all')">All Sites</button>
+  <button class="filter-btn"        data-filter="incident" onclick="setFilter('incident')">🔴 Incident</button>
+  <button class="filter-btn"        data-filter="atrisk"   onclick="setFilter('atrisk')">🟡 At Risk</button>
+  <button class="filter-btn"        data-filter="healthy"  onclick="setFilter('healthy')">🟢 Healthy</button>
+  <button class="filter-btn"        data-filter="offline"  onclick="setFilter('offline')">⚫ Offline</button>
+  <div class="toolbar-sep"></div>
+  <input class="search-input" id="search-input" placeholder="🔍 Search sites…" oninput="renderSites()" />
+</div>
+
+<!-- ── Sites grid ── -->
+<div class="sites-grid" id="sites-grid"></div>
+
+<!-- ── Drill-down drawer ── -->
+<div class="overlay" id="overlay" onclick="closeDrawer(event)">
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <span class="drawer-title" id="drawer-title">Site Detail</span>
+      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </div>
+</div>
+
+<!-- ── Export toast ── -->
+<div class="toast" id="toast">✅ Shift report exported — CSV ready</div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────
+const SITES = [
+  {
+    id: 'pac-a', org: 'pacific', name: 'Pacific Port — Seattle', location: 'Seattle, WA',
+    status: 'incident',
+    robots: [
+      { id: 'R-01', name: 'R-01 Alpha',  status: 'incident',    task: 'Dock unload — Bay 3',    uptime: '98%', lastSeen: '0m ago'  },
+      { id: 'R-02', name: 'R-02 Bravo',  status: 'online',      task: 'Yard transfer — Zone B', uptime: '99%', lastSeen: '0m ago'  },
+      { id: 'R-03', name: 'R-03 Charlie', status: 'online',     task: 'Idle — awaiting dispatch', uptime: '97%', lastSeen: '1m ago' },
+      { id: 'R-04', name: 'R-04 Delta',  status: 'maintenance', task: 'Scheduled maintenance',  uptime: '94%', lastSeen: '8m ago'  },
+    ],
+    incidents: [
+      { type: 'Navigation fault', severity: 'high',   time: '14:22', desc: 'R-01 Alpha entered safe-stop: obstacle detected on dock ramp approach. Manual clearance required.' },
+      { type: 'Coverage gap',     severity: 'medium', time: '13:58', desc: 'Bay 5 uncovered for 18 min during shift handover. R-04 maintenance extended beyond scheduled window.' },
+    ],
+    availability: 75, totalRobots: 4, activeRobots: 2, activeIncidents: 2, coverage: '75%', lastUpdated: '1 min ago',
+  },
+  {
+    id: 'pac-b', org: 'pacific', name: 'Pacific Port — Oakland', location: 'Oakland, CA',
+    status: 'atrisk',
+    robots: [
+      { id: 'R-01', name: 'R-01 Alpha',  status: 'online',   task: 'Container stack — Zone C', uptime: '99%', lastSeen: '0m ago' },
+      { id: 'R-02', name: 'R-02 Bravo',  status: 'online',   task: 'Yard transfer — Gate 2',  uptime: '98%', lastSeen: '0m ago' },
+      { id: 'R-03', name: 'R-03 Charlie', status: 'offline', task: '—',                        uptime: '72%', lastSeen: '34m ago' },
+    ],
+    incidents: [],
+    availability: 67, totalRobots: 3, activeRobots: 2, activeIncidents: 0, coverage: '67%', lastUpdated: '3 min ago',
+    atRiskNote: 'Shift coverage below threshold: only 2 of 3 robots active. R-03 Charlie offline for 34 min — connectivity fault unresolved.',
+  },
+  {
+    id: 'pac-c', org: 'pacific', name: 'Pacific Port — Los Angeles', location: 'Los Angeles, CA',
+    status: 'healthy',
+    robots: [
+      { id: 'R-01', name: 'R-01 Alpha',  status: 'online', task: 'Container unload — Berth 7', uptime: '100%', lastSeen: '0m ago' },
+      { id: 'R-02', name: 'R-02 Bravo',  status: 'online', task: 'Yard sort — Zone A',         uptime: '99%',  lastSeen: '0m ago' },
+      { id: 'R-03', name: 'R-03 Charlie', status: 'online', task: 'Gate inspection — Gate 1',  uptime: '98%',  lastSeen: '1m ago' },
+      { id: 'R-04', name: 'R-04 Delta',  status: 'online', task: 'Container stack — Zone D',   uptime: '100%', lastSeen: '0m ago' },
+    ],
+    incidents: [],
+    availability: 100, totalRobots: 4, activeRobots: 4, activeIncidents: 0, coverage: '100%', lastUpdated: '0 min ago',
+  },
+  {
+    id: 'mer-phx', org: 'meridian', name: 'Meridian — Phoenix', location: 'Phoenix, AZ',
+    status: 'healthy',
+    robots: [
+      { id: 'R-01', name: 'R-01 Alpha', status: 'online', task: 'Inbound sort — Lane 2', uptime: '100%', lastSeen: '0m ago' },
+      { id: 'R-02', name: 'R-02 Bravo', status: 'online', task: 'Outbound pack — Bay A', uptime: '99%',  lastSeen: '0m ago' },
+      { id: 'R-03', name: 'R-03 Charlie', status: 'online', task: 'Returns — Zone R',    uptime: '97%',  lastSeen: '2m ago' },
+    ],
+    incidents: [],
+    availability: 100, totalRobots: 3, activeRobots: 3, activeIncidents: 0, coverage: '100%', lastUpdated: '2 min ago',
+  },
+  {
+    id: 'mer-atl', org: 'meridian', name: 'Meridian — Atlanta', location: 'Atlanta, GA',
+    status: 'atrisk',
+    robots: [
+      { id: 'R-01', name: 'R-01 Alpha',  status: 'online',      task: 'Cross-dock — Dock 3', uptime: '98%', lastSeen: '0m ago'  },
+      { id: 'R-02', name: 'R-02 Bravo',  status: 'maintenance', task: 'Battery replacement', uptime: '88%', lastSeen: '12m ago' },
+      { id: 'R-03', name: 'R-03 Charlie', status: 'online',     task: 'Staging — Zone B',    uptime: '96%', lastSeen: '1m ago'  },
+    ],
+    incidents: [],
+    availability: 67, totalRobots: 3, activeRobots: 2, activeIncidents: 0, coverage: '67%', lastUpdated: '1 min ago',
+    atRiskNote: 'R-02 Bravo in unplanned maintenance (battery swap). Site coverage at 67% — below the 80% SLA threshold.',
+  },
+  {
+    id: 'mer-dal', org: 'meridian', name: 'Meridian — Dallas', location: 'Dallas, TX',
+    status: 'incident',
+    robots: [
+      { id: 'R-01', name: 'R-01 Alpha',  status: 'offline',  task: '—', uptime: '61%', lastSeen: '52m ago' },
+      { id: 'R-02', name: 'R-02 Bravo',  status: 'incident', task: 'Emergency stop — Aisle 4', uptime: '89%', lastSeen: '3m ago' },
+      { id: 'R-03', name: 'R-03 Charlie', status: 'online',  task: 'Manual override — holding', uptime: '95%', lastSeen: '0m ago' },
+      { id: 'R-04', name: 'R-04 Delta',  status: 'online',   task: 'Idle — awaiting clearance', uptime: '97%', lastSeen: '0m ago' },
+    ],
+    incidents: [
+      { type: 'Emergency stop',    severity: 'high',   time: '14:31', desc: 'R-02 Bravo triggered e-stop in Aisle 4. Human personnel proximity detected. Awaiting safety clearance before restart.' },
+      { type: 'Connectivity loss', severity: 'high',   time: '13:41', desc: 'R-01 Alpha connection lost. Last known position: Dock 2 approach. Maintenance dispatched.' },
+    ],
+    availability: 50, totalRobots: 4, activeRobots: 2, activeIncidents: 2, coverage: '50%', lastUpdated: '3 min ago',
+  },
+];
+
+const PERMISSIONS = {
+  admin:    SITES.map(s => s.id),
+  pacific:  SITES.filter(s => s.org === 'pacific').map(s => s.id),
+  meridian: SITES.filter(s => s.org === 'meridian').map(s => s.id),
+};
+
+// ── State ─────────────────────────────────────────────────────────────────
+let currentUser   = 'admin';
+let currentFilter = 'all';
+
+const visibleSites = () => {
+  const allowed = PERMISSIONS[currentUser];
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+  return SITES.filter(s => {
+    if (!allowed.includes(s.id)) return false;
+    if (currentFilter !== 'all' && s.status !== currentFilter) return false;
+    if (q && !s.name.toLowerCase().includes(q) && !s.location.toLowerCase().includes(q)) return false;
+    return true;
+  });
+};
+
+// ── KPI bar ───────────────────────────────────────────────────────────────
+function renderKPI() {
+  const allowed = PERMISSIONS[currentUser];
+  const sites = SITES.filter(s => allowed.includes(s.id));
+  const totalRobots   = sites.reduce((a,s) => a + s.totalRobots, 0);
+  const activeRobots  = sites.reduce((a,s) => a + s.activeRobots, 0);
+  const totalInc      = sites.reduce((a,s) => a + s.activeIncidents, 0);
+  const atRisk        = sites.filter(s => s.status === 'atrisk').length;
+  const avgAvail      = sites.length ? Math.round(sites.reduce((a,s) => a + s.availability, 0) / sites.length) : 0;
+  const availColor    = avgAvail >= 90 ? 'kv-green' : avgAvail >= 70 ? 'kv-yellow' : 'kv-red';
+  const incColor      = totalInc === 0 ? 'kv-green' : totalInc <= 2 ? 'kv-yellow' : 'kv-red';
+
+  document.getElementById('kpi-bar').innerHTML = `
+    <div class="kpi-tile"><div class="kpi-label">Fleet Availability</div><div class="kpi-value ${availColor}">${avgAvail}%</div><div class="kpi-sub">${activeRobots} of ${totalRobots} robots active</div></div>
+    <div class="kpi-tile"><div class="kpi-label">Active Incidents</div><div class="kpi-value ${incColor}">${totalInc}</div><div class="kpi-sub">${sites.filter(s=>s.status==='incident').length} sites affected</div></div>
+    <div class="kpi-tile"><div class="kpi-label">At-Risk Sites</div><div class="kpi-value kv-yellow">${atRisk}</div><div class="kpi-sub">Coverage below 80% SLA</div></div>
+    <div class="kpi-tile"><div class="kpi-label">Sites Monitored</div><div class="kpi-value kv-blue">${sites.length}</div><div class="kpi-sub">${sites.filter(s=>s.status==='healthy').length} healthy · ${sites.filter(s=>s.status==='offline').length} offline</div></div>
+  `;
+}
+
+// ── Incident banner ────────────────────────────────────────────────────────
+function renderBanner() {
+  const allowed = PERMISSIONS[currentUser];
+  const incidentSites = SITES.filter(s => allowed.includes(s.id) && s.status === 'incident');
+  const el = document.getElementById('incident-banner');
+  if (incidentSites.length === 0) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = `🔴 <b>${incidentSites.length} active incident${incidentSites.length>1?'s':''}</b> — ${incidentSites.map(s=>`<b>${s.name}</b>`).join(', ')} · Review and take action.`;
+}
+
+// ── Sites grid ────────────────────────────────────────────────────────────
+const STATUS_LABEL = { incident: 'INCIDENT', atrisk: 'AT RISK', healthy: 'HEALTHY', offline: 'OFFLINE' };
+const PILL_CLASS   = { incident: 'pill-incident', atrisk: 'pill-atrisk', healthy: 'pill-healthy', offline: 'pill-offline' };
+const AVAIL_COLOR  = avail => avail >= 90 ? 'kv-green' : avail >= 70 ? 'kv-yellow' : 'kv-red';
+
+function renderSites() {
+  const grid = document.getElementById('sites-grid');
+  const sites = visibleSites();
+  if (!sites.length) {
+    grid.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div>No sites match the current filter.<br/>Try adjusting the filter or search.</div>`;
+    return;
+  }
+  grid.innerHTML = sites.map(s => {
+    const incBanner = s.activeIncidents > 0
+      ? `<div class="card-incidents">🚨 <b>${s.activeIncidents} active incident${s.activeIncidents>1?'s':''}</b> — ${s.incidents.map(i=>i.type).join(' · ')}</div>` : '';
+    const riskNote = s.atRiskNote
+      ? `<div class="card-atrisk-note">⚠️ ${s.atRiskNote}</div>` : '';
+    return `
+    <div class="site-card status-${s.status}" onclick="openDrawer('${s.id}')">
+      <div class="card-status-bar bar-${s.status}"></div>
+      <div class="card-body">
+        <div class="card-top">
+          <div><div class="card-name">${s.name}</div><div class="card-loc">📍 ${s.location}</div></div>
+          <span class="status-pill ${PILL_CLASS[s.status]}">${STATUS_LABEL[s.status]}</span>
+        </div>
+        <div class="card-metrics">
+          <div class="metric"><div class="metric-label">Availability</div><div class="metric-value ${AVAIL_COLOR(s.availability)}">${s.availability}%</div></div>
+          <div class="metric"><div class="metric-label">Active</div><div class="metric-value">${s.activeRobots}/${s.totalRobots}</div></div>
+          <div class="metric"><div class="metric-label">Incidents</div><div class="metric-value ${s.activeIncidents>0?'kv-red':'kv-green'}">${s.activeIncidents}</div></div>
+        </div>
+        ${incBanner}${riskNote}
+        <div class="card-footer">
+          <span class="card-updated">Updated ${s.lastUpdated}</span>
+          <button class="view-btn">View Site →</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Drawer ────────────────────────────────────────────────────────────────
+function openDrawer(siteId) {
+  const s = SITES.find(x => x.id === siteId);
+  if (!s) return;
+
+  const DOT_CLASS = { online: 'dot-online', offline: 'dot-offline', incident: 'dot-incident', maintenance: 'dot-maintenance' };
+  const STATUS_TEXT = { online: 'Online', offline: 'Offline', incident: 'Incident', maintenance: 'Maintenance' };
+
+  const robotRows = s.robots.map(r => `
+    <tr>
+      <td>${r.id}</td>
+      <td><b>${r.name}</b></td>
+      <td><span class="robot-status"><span class="dot ${DOT_CLASS[r.status]}"></span>${STATUS_TEXT[r.status]}</span></td>
+      <td style="color:var(--muted);font-size:11px;">${r.task}</td>
+      <td style="text-align:right;">${r.uptime}</td>
+    </tr>`).join('');
+
+  const incLog = s.incidents.length
+    ? s.incidents.map(i => `
+      <div class="incident-log-entry">
+        <div class="inc-top">
+          <span class="inc-type">🚨 ${i.type}</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="inc-severity sev-${i.severity}">${i.severity.toUpperCase()}</span>
+            <span class="inc-time">${i.time}</span>
+          </div>
+        </div>
+        <div class="inc-desc">${i.desc}</div>
+      </div>`).join('')
+    : `<div style="font-size:12px;color:var(--muted);padding:8px 0;">No active incidents at this site.</div>`;
+
+  document.getElementById('drawer-title').textContent = `${s.name}  ·  ${s.location}`;
+  document.getElementById('drawer-body').innerHTML = `
+    <div class="section-title">Site KPIs</div>
+    <div class="kpi-row">
+      <div class="kpi-mini"><div class="kpi-label">Availability</div><div class="kpi-value ${AVAIL_COLOR(s.availability)}">${s.availability}%</div></div>
+      <div class="kpi-mini"><div class="kpi-label">Active Robots</div><div class="kpi-value">${s.activeRobots}/${s.totalRobots}</div></div>
+      <div class="kpi-mini"><div class="kpi-label">Incidents</div><div class="kpi-value ${s.activeIncidents>0?'kv-red':'kv-green'}">${s.activeIncidents}</div></div>
+    </div>
+    <div class="section-title">Fleet Status</div>
+    <table class="robot-table">
+      <thead><tr><th>ID</th><th>Robot</th><th>Status</th><th>Current Task</th><th style="text-align:right;">Uptime</th></tr></thead>
+      <tbody>${robotRows}</tbody>
+    </table>
+    <div class="section-title">Incident Log</div>
+    ${incLog}
+    <div class="section-title">Site Report</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.7;">
+      Last updated: <b style="color:var(--text);">${s.lastUpdated}</b><br/>
+      Status: <b style="color:var(--text);">${STATUS_LABEL[s.status]}</b><br/>
+      Coverage: <b style="color:var(--text);">${s.coverage}</b>
+      ${s.atRiskNote ? `<br/><span style="color:var(--yellow);">⚠️ ${s.atRiskNote}</span>` : ''}
+    </div>`;
+
+  document.getElementById('overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrawer(e) {
+  if (e && e.target !== document.getElementById('overlay')) return;
+  document.getElementById('overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── Filter / user ─────────────────────────────────────────────────────────
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+  renderSites();
+}
+
+function onUserChange() {
+  currentUser = document.getElementById('user-select').value;
+  renderKPI(); renderBanner(); renderSites();
+}
+
+// ── CSV Export ────────────────────────────────────────────────────────────
+function exportCSV() {
+  const allowed = PERMISSIONS[currentUser];
+  const sites = SITES.filter(s => allowed.includes(s.id));
+  const rows = [['Site','Location','Status','Availability %','Active Robots','Total Robots','Active Incidents','Coverage','Last Updated']];
+  sites.forEach(s => rows.push([s.name, s.location, STATUS_LABEL[s.status], s.availability, s.activeRobots, s.totalRobots, s.activeIncidents, s.coverage, s.lastUpdated]));
+  // Robot detail rows
+  rows.push([]);
+  rows.push(['Site','Robot ID','Robot Name','Status','Current Task','Uptime','Last Seen']);
+  sites.forEach(s => s.robots.forEach(r => rows.push([s.name, r.id, r.name, r.status, r.task, r.uptime, r.lastSeen])));
+
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = `acme-fleet-shift-report-${new Date().toISOString().slice(0,16).replace('T','_').replace(':','h')}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+renderKPI(); renderBanner(); renderSites();
+</script>
+</body>
+</html>
