@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acme Robotics — Queue Status Prototype</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --border: #2e3148; --text: #e4e6f0;
+      --muted: #7a7f9a; --accent: #5b6af0; --green: #34d399; --red: #f87171;
+      --yellow: #fbbf24; --blue: #60a5fa; --purple: #c084fc; --orange: #fb923c;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 16px; font-weight: 600; }
+    header .badge { background: #2a1f5e; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: .5px; }
+    .layout { display: grid; grid-template-columns: 320px 1fr 280px; height: calc(100vh - 49px); }
+    .panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    .panel:last-child { border-right: none; }
+    .panel-header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+    .panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+    .operator-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: border-color .15s; }
+    .operator-card:hover { border-color: var(--accent); }
+    .operator-card.active { border-color: var(--accent); background: #1e2040; }
+    .operator-card .name { font-weight: 600; margin-bottom: 3px; }
+    .operator-card .role { font-size: 11px; padding: 2px 6px; border-radius: 3px; display: inline-block; }
+    .role-operator { background: #1c2a4a; color: var(--blue); }
+    .role-supervisor { background: #2d1c4a; color: var(--purple); }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 600; letter-spacing: .4px; }
+    select, input[type="text"] { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 8px 10px; font-size: 13px; outline: none; transition: border-color .15s; }
+    select:focus, input[type="text"]:focus { border-color: var(--accent); }
+    select option { background: #1a1d27; }
+    .btn { width: 100%; padding: 10px; border-radius: 6px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; }
+    .btn:hover { opacity: .9; } .btn:active { transform: scale(.98); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); margin-top: 8px; }
+    .alert { border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; line-height: 1.5; }
+    .alert-error  { background: #2d1515; border: 1px solid var(--red);    color: var(--red);    }
+    .alert-warn   { background: #2d2015; border: 1px solid var(--yellow); color: var(--yellow); }
+    .alert-info   { background: #15202d; border: 1px solid var(--blue);   color: var(--blue);   }
+    .command-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+    .command-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+    .command-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .command-route { font-weight: 600; font-size: 13px; }
+    .status-pill { font-size: 11px; font-weight: 700; letter-spacing: .5px; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; }
+    .status-queued     { background: #1c2a1c; color: var(--yellow); border: 1px solid var(--yellow); }
+    .status-processing { background: #1c2040; color: var(--blue);   border: 1px solid var(--blue);   }
+    .status-confirmed  { background: #152820; color: var(--green);  border: 1px solid var(--green);  }
+    .status-failed     { background: #2d1515; color: var(--red);    border: 1px solid var(--red);    }
+    .status-conflict   { background: #2d1c15; color: var(--orange); border: 1px solid var(--orange); }
+    .progress-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+    .progress-fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
+    .fill-queued     { background: var(--yellow); width: 20%; }
+    .fill-processing { background: var(--blue);   width: 60%; }
+    .fill-confirmed  { background: var(--green);  width: 100%; }
+    .fill-failed     { background: var(--red);    width: 100%; }
+    .fill-conflict   { background: var(--orange); width: 100%; }
+    .supervisor-action { margin-top: 10px; display: flex; gap: 8px; }
+    .btn-approve { flex: 1; padding: 6px; border-radius: 5px; border: 1px solid var(--green); background: #15272d; color: var(--green); font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-reject  { flex: 1; padding: 6px; border-radius: 5px; border: 1px solid var(--red);   background: #2d1515; color: var(--red);   font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-approve:hover { background: #1d3830; } .btn-reject:hover { background: #3d1f1f; }
+    .audit-entry { border-left: 2px solid var(--border); padding: 6px 0 6px 12px; margin-bottom: 8px; position: relative; }
+    .audit-entry::before { content: ''; position: absolute; left: -5px; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .audit-entry.ev-confirmed::before  { background: var(--green);  }
+    .audit-entry.ev-failed::before     { background: var(--red);    }
+    .audit-entry.ev-processing::before { background: var(--blue);   }
+    .audit-entry.ev-conflict::before   { background: var(--orange); }
+    .audit-entry.ev-approved::before   { background: var(--purple); }
+    .audit-entry.ev-rejected::before   { background: var(--red);    }
+    .audit-entry.ev-blocked::before    { background: var(--yellow); }
+    .audit-time { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+    .audit-msg  { font-size: 12px; line-height: 1.4; }
+    .empty-state { text-align: center; color: var(--muted); padding: 40px 20px; font-size: 12px; line-height: 1.7; }
+    .empty-icon { font-size: 28px; margin-bottom: 8px; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    .config-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .config-row label { color: var(--muted); font-size: 11px; margin-bottom: 0; }
+    .config-row input[type="number"] { width: 70px; padding: 5px 8px; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); outline: none; }
+    .tag { display: inline-block; background: var(--border); color: var(--muted); border-radius: 3px; padding: 1px 6px; font-size: 10px; font-weight: 600; margin-left: 4px; }
+    ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🤖 Acme Robotics — Command Queue Prototype</h1>
+  <span class="badge">SANDBOX · DO NOT MERGE</span>
+</header>
+<div class="layout">
+  <div class="panel">
+    <div class="panel-header">⚡ Submit Command</div>
+    <div class="panel-body">
+      <div class="form-group"><label>OPERATOR</label><div id="operator-list"></div></div>
+      <hr class="divider" />
+      <div id="form-alert"></div>
+      <div class="form-group"><label>ROBOT</label><select id="robot-select"></select></div>
+      <div class="form-group"><label>ROUTE OVERRIDE</label><input type="text" id="route-input" placeholder="e.g. Dock-A → Bay-7" /></div>
+      <button class="btn btn-primary" onclick="submitCommand()">Submit Route Command</button>
+      <button class="btn btn-secondary" onclick="resetAll()">Reset Demo</button>
+      <hr class="divider" />
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:700;letter-spacing:.5px;">CONFIG</div>
+      <div class="config-row"><label>Duplicate window (ms)</label><input type="number" id="dup-window" value="10000" min="1000" step="1000" /></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-header">📋 Command Queue <span id="queue-count" class="tag">0</span></div>
+    <div class="panel-body" id="queue-panel">
+      <div class="empty-state"><div class="empty-icon">📭</div>No commands submitted yet.<br/>Select an operator and submit a route command.</div>
+    </div>
+  </div>
+  <div class="panel" style="border-right:none;">
+    <div class="panel-header">🔍 Audit Trail</div>
+    <div class="panel-body" id="audit-panel">
+      <div class="empty-state"><div class="empty-icon">📝</div>Audit events will appear here as commands transition through states.</div>
+    </div>
+  </div>
+</div>
+<script>
+const OPERATORS = [
+  { id: 'op-1', name: 'Aoife Murphy',  role: 'operator'   },
+  { id: 'op-2', name: 'Carlos Reyes', role: 'operator'   },
+  { id: 'op-3', name: 'Sarah Chen',   role: 'supervisor' },
+];
+const ROBOTS = ['R-01 Alpha','R-02 Bravo','R-03 Charlie','R-04 Delta'];
+const QUEUED_MS = 800, PROCESSING_MS = 2200;
+let selectedOperatorId = OPERATORS[0].id, commands = [], auditLog = [], cmdSeq = 1;
+const lastSubmit = {}, activeRobotCmd = {};
+const $ = id => document.getElementById(id);
+const dupWindowMs = () => parseInt($('dup-window').value) || 10000;
+const timeStr = () => new Date().toLocaleTimeString('en-IE', { hour12: false });
+const shortId = cmd => `CMD-${String(cmd.id).padStart(3,'0')}`;
+const operatorById = id => OPERATORS.find(o => o.id === id);
+function renderOperators() {
+  const list = $('operator-list'); list.innerHTML = '';
+  OPERATORS.forEach(op => {
+    const div = document.createElement('div');
+    div.className = 'operator-card' + (op.id === selectedOperatorId ? ' active' : '');
+    div.innerHTML = `<div class="name">${op.name}</div><span class="role role-${op.role}">${op.role === 'supervisor' ? '👑 Supervisor' : '🔧 Operator'}</span>`;
+    div.onclick = () => { selectedOperatorId = op.id; renderOperators(); clearAlert(); };
+    list.appendChild(div);
+  });
+}
+function renderRobots() { $('robot-select').innerHTML = ROBOTS.map(r => `<option value="${r}">${r}</option>`).join(''); }
+const setAlert = (t, m) => { $('form-alert').innerHTML = `<div class="alert alert-${t}">${m}</div>`; };
+const clearAlert = () => { $('form-alert').innerHTML = ''; };
+function submitCommand() {
+  clearAlert();
+  const op = operatorById(selectedOperatorId), robot = $('robot-select').value;
+  const route = $('route-input').value.trim() || `Route-${Math.floor(Math.random()*99)+1}`;
+  const now = Date.now(), dupKey = `${op.id}:${robot}`, win = dupWindowMs();
+  if (lastSubmit[dupKey] && (now - lastSubmit[dupKey]) < win) {
+    const r = Math.ceil((win - (now - lastSubmit[dupKey])) / 1000);
+    setAlert('error', `⛔ Duplicate command blocked — a command for <b>${robot}</b> was already submitted by <b>${op.name}</b>. Please wait <b>${r}s</b> before resubmitting.`);
+    addAudit(null,'blocked',op.name,`Duplicate blocked for ${robot} — ${r}s cooldown remaining`); renderAudit(); return;
+  }
+  const ccid = activeRobotCmd[robot];
+  if (ccid !== undefined) {
+    const cc = commands.find(c => c.id === ccid);
+    if (cc && ['queued','processing'].includes(cc.status)) {
+      if (op.role !== 'supervisor') {
+        setAlert('warn', `⚠️ Route conflict — <b>${robot}</b> already has an active command by <b>${cc.operatorName}</b> (<i>${cc.route}</i>). A supervisor can override this.`);
+        addAudit(null,'conflict',op.name,`Conflict: ${robot} has active command by ${cc.operatorName}`); renderAudit(); return;
+      } else {
+        setAlert('info', `👑 Supervisor override initiated for <b>${robot}</b>. Conflicting command by <b>${cc.operatorName}</b> will be superseded if approved.`);
+        createCommand(op,robot,route,now,dupKey,'conflict',ccid); return;
+      }
+    }
+  }
+  createCommand(op,robot,route,now,dupKey,'queued',null);
+}
+function createCommand(op,robot,route,now,dupKey,initStatus,conflictWith) {
+  const cmd = { id:cmdSeq++, operatorId:op.id, operatorName:op.name, robot, route, submittedAt:now, status:initStatus, conflictWith };
+  commands.push(cmd); lastSubmit[dupKey] = now;
+  if (initStatus === 'queued') { activeRobotCmd[robot] = cmd.id; addAudit(cmd,'queued',op.name,`Route: ${route}`); scheduleTransition(cmd); }
+  else if (initStatus === 'conflict') addAudit(cmd,'conflict',op.name,`Supervisor override pending for ${robot} — conflicting with CMD-${String(conflictWith).padStart(3,'0')}`);
+  renderQueue(); renderAudit(); updateQueueCount();
+}
+function scheduleTransition(cmd) {
+  setTimeout(() => {
+    if (cmd.status !== 'queued') return;
+    transitionTo(cmd,'processing');
+    setTimeout(() => { if (cmd.status !== 'processing') return; transitionTo(cmd, Math.random() < 0.9 ? 'confirmed' : 'failed'); }, PROCESSING_MS);
+  }, QUEUED_MS);
+}
+function transitionTo(cmd, ns) {
+  const os = cmd.status; cmd.status = ns;
+  if (['confirmed','failed'].includes(ns) && activeRobotCmd[cmd.robot] === cmd.id) delete activeRobotCmd[cmd.robot];
+  addAudit(cmd,ns,cmd.operatorName,`${shortId(cmd)} transitioned ${os} → ${ns}`);
+  renderQueue(); renderAudit(); updateQueueCount();
+}
+function supervisorApprove(cmdId) {
+  const cmd = commands.find(c => c.id === cmdId); if (!cmd || cmd.status !== 'conflict') return;
+  const cc = commands.find(c => c.id === cmd.conflictWith);
+  if (cc && ['queued','processing'].includes(cc.status)) {
+    cc.status = 'failed';
+    if (activeRobotCmd[cc.robot] === cc.id) delete activeRobotCmd[cc.robot];
+    addAudit(cc,'failed','System',`Superseded by supervisor override from ${cmd.operatorName}`);
+  }
+  activeRobotCmd[cmd.robot] = cmd.id; cmd.conflictWith = null;
+  lastSubmit[`${cmd.operatorId}:${cmd.robot}`] = Date.now();
+  transitionTo(cmd,'queued'); scheduleTransition(cmd);
+  addAudit(cmd,'approved',cmd.operatorName,`Supervisor override approved for ${cmd.robot}`);
+  renderQueue(); renderAudit(); clearAlert();
+}
+function supervisorReject(cmdId) {
+  const cmd = commands.find(c => c.id === cmdId); if (!cmd || cmd.status !== 'conflict') return;
+  addAudit(cmd,'rejected',cmd.operatorName,`Supervisor override rejected for ${cmd.robot}`);
+  cmd.status = 'failed'; renderQueue(); renderAudit(); updateQueueCount();
+}
+const STATUS_LABEL = { queued:'QUEUED', processing:'PROCESSING', confirmed:'CONFIRMED', failed:'FAILED', conflict:'CONFLICT — PENDING REVIEW' };
+function renderQueue() {
+  const panel = $('queue-panel');
+  if (!commands.length) { panel.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div>No commands submitted yet.<br/>Select an operator and submit a route command.</div>`; return; }
+  panel.innerHTML = [...commands].reverse().map(cmd => {
+    const ts = new Date(cmd.submittedAt).toLocaleTimeString('en-IE',{hour12:false});
+    const op = operatorById(cmd.operatorId), sc = cmd.status === 'conflict' ? 'conflict' : cmd.status;
+    const cur = operatorById(selectedOperatorId);
+    let btns = '';
+    if (cmd.status === 'conflict' && cur?.role === 'supervisor')
+      btns = `<div class="supervisor-action"><button class="btn-approve" onclick="supervisorApprove(${cmd.id})">✓ Approve Override</button><button class="btn-reject" onclick="supervisorReject(${cmd.id})">✕ Reject Override</button></div>`;
+    else if (cmd.status === 'conflict')
+      btns = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">Switch to a Supervisor operator to resolve this conflict.</div>`;
+    return `<div class="command-card"><div class="command-top"><div><div class="command-route">${shortId(cmd)} — ${cmd.route}</div><div class="command-meta">${op?.role==='supervisor'?'👑 ':''}${cmd.operatorName} · ${cmd.robot} · ${ts}</div></div><span class="status-pill status-${sc}">${STATUS_LABEL[cmd.status]}</span></div><div class="progress-bar"><div class="progress-fill fill-${sc}"></div></div>${btns}</div>`;
+  }).join('');
+}
+const updateQueueCount = () => { $('queue-count').textContent = commands.filter(c=>['queued','processing','conflict'].includes(c.status)).length; };
+const addAudit = (cmd,event,actor,detail) => { auditLog.unshift({time:timeStr(),commandId:cmd?shortId(cmd):null,event,actor,detail}); };
+function renderAudit() {
+  const panel = $('audit-panel');
+  if (!auditLog.length) { panel.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div>Audit events will appear here as commands transition through states.</div>`; return; }
+  panel.innerHTML = auditLog.map(e=>`<div class="audit-entry ev-${e.event}"><div class="audit-time">${e.time}${e.commandId?' · '+e.commandId:''}</div><div class="audit-msg"><b>${e.actor}</b> — ${e.detail}</div></div>`).join('');
+}
+function resetAll() {
+  commands=[]; auditLog=[]; cmdSeq=1;
+  Object.keys(lastSubmit).forEach(k=>delete lastSubmit[k]);
+  Object.keys(activeRobotCmd).forEach(k=>delete activeRobotCmd[k]);
+  $('route-input').value=''; clearAlert(); renderQueue(); renderAudit(); updateQueueCount();
+}
+renderOperators(); renderRobots(); updateQueueCount();
+</script>
+</body>
+</html>
