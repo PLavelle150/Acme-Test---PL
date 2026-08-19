@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acme Robotics — FleetOps Lifecycle Prototype</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --border: #2e3148; --text: #e4e6f0;
+      --muted: #7a7f9a; --accent: #5b6af0;
+      --green: #34d399; --red: #f87171; --yellow: #fbbf24;
+      --blue: #60a5fa; --purple: #c084fc; --orange: #fb923c;
+      --teal: #2dd4bf; --indigo: #818cf8;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    /* ── Header ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+    header h1 { font-size: 15px; font-weight: 600; }
+    .hdr-right { display: flex; align-items: center; gap: 10px; }
+    .badge-sandbox { background: #2a1f5e; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+    .peak-btn { padding: 5px 14px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .peak-btn.active { background: #3d1f15; border-color: var(--orange); color: var(--orange); }
+    .peak-indicator { display: none; font-size: 11px; color: var(--orange); font-weight: 700; animation: blink 1s step-start infinite; }
+    .peak-indicator.visible { display: inline; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Layout ── */
+    .layout { display: grid; grid-template-columns: 300px 1fr 300px; height: calc(100vh - 45px); }
+    .panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    .panel:last-child { border-right: none; }
+    .panel-header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+    .panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+    /* ── Operator selector ── */
+    .op-card { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px; margin-bottom: 7px; cursor: pointer; transition: border-color .15s; }
+    .op-card:hover { border-color: var(--accent); }
+    .op-card.active { border-color: var(--accent); background: #1e2040; }
+    .op-name { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+    .op-role { font-size: 11px; padding: 2px 7px; border-radius: 3px; display: inline-block; }
+    .role-operator   { background: #1c2a4a; color: var(--blue); }
+    .role-supervisor { background: #2d1c4a; color: var(--purple); }
+
+    /* ── Form ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 11px 0; }
+    .form-group { margin-bottom: 10px; }
+    label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 700; letter-spacing: .4px; }
+    select, input[type="text"], input[type="number"] {
+      width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 7px 9px; font-size: 13px; outline: none; transition: border-color .15s;
+    }
+    select:focus, input:focus { border-color: var(--accent); }
+    select option { background: #1a1d27; }
+    .btn { width: 100%; padding: 9px; border-radius: 6px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; }
+    .btn:hover { opacity: .88; } .btn:active { transform: scale(.98); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); margin-top: 7px; }
+    .alert { border-radius: 6px; padding: 9px 11px; margin-bottom: 11px; font-size: 12px; line-height: 1.55; }
+    .alert-error { background: #2d1515; border: 1px solid var(--red);    color: var(--red);    }
+    .alert-warn  { background: #2d2015; border: 1px solid var(--yellow); color: var(--yellow); }
+    .alert-info  { background: #15202d; border: 1px solid var(--blue);   color: var(--blue);   }
+
+    /* ── Config rows ── */
+    .config-section { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .5px; margin-bottom: 8px; }
+    .config-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .config-row label { color: var(--muted); font-size: 11px; margin-bottom: 0; font-weight: 400; }
+    .config-row input[type="number"] { width: 80px; padding: 5px 7px; font-size: 12px; }
+
+    /* ── Command cards ── */
+    .cmd-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; margin-bottom: 10px; transition: border-color .2s; }
+    .cmd-card.latency-warn { border-color: var(--yellow); }
+    .cmd-card.timed-out    { border-color: var(--red); opacity: .85; }
+    .cmd-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+    .cmd-title { font-weight: 600; font-size: 13px; }
+    .cmd-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* Status pills */
+    .pill { font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; white-space: nowrap; }
+    .pill-received   { background: #15202d; color: var(--teal);   border: 1px solid var(--teal);   }
+    .pill-queued     { background: #2d2810; color: var(--yellow); border: 1px solid var(--yellow); }
+    .pill-dispatched { background: #23183a; color: var(--purple); border: 1px solid var(--purple); }
+    .pill-executing  { background: #2d1f10; color: var(--orange); border: 1px solid var(--orange); }
+    .pill-completed  { background: #152820; color: var(--green);  border: 1px solid var(--green);  }
+    .pill-failed     { background: #2d1515; color: var(--red);    border: 1px solid var(--red);    }
+    .pill-timeout    { background: #3d1010; color: #fca5a5;       border: 1px solid #fca5a5;       }
+    .pill-conflict   { background: #2d1f10; color: var(--orange); border: 1px solid var(--orange); }
+
+    /* Progress bar */
+    .progress-bar  { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 8px 0; }
+    .progress-fill { height: 100%; border-radius: 2px; transition: width .5s ease; }
+    .fill-received   { background: var(--teal);   width: 10%; }
+    .fill-queued     { background: var(--yellow); width: 28%; }
+    .fill-dispatched { background: var(--purple); width: 55%; }
+    .fill-executing  { background: var(--orange); width: 75%; animation: pulse-bar 1.2s ease-in-out infinite; }
+    .fill-completed  { background: var(--green);  width: 100%; }
+    .fill-failed     { background: var(--red);    width: 100%; }
+    .fill-timeout    { background: #fca5a5;        width: 100%; }
+    .fill-conflict   { background: var(--orange); width: 40%; }
+    @keyframes pulse-bar { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+    /* Latency timer */
+    .latency-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; margin-top: 4px; }
+    .latency-timer { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .latency-timer.warn   { color: var(--yellow); font-weight: 700; }
+    .latency-timer.danger { color: var(--orange); font-weight: 700; }
+
+    /* Latency warning banner */
+    .latency-banner { background: #2d2010; border: 1px solid var(--yellow); border-radius: 5px; padding: 7px 10px; margin-top: 8px; font-size: 11px; color: var(--yellow); line-height: 1.5; }
+    .latency-banner b { font-weight: 700; }
+
+    /* Error next-steps */
+    .next-steps { background: #1f1520; border: 1px solid #4a2040; border-radius: 5px; padding: 8px 10px; margin-top: 8px; font-size: 11px; color: #ddb8f0; line-height: 1.6; }
+    .next-steps .ns-title { font-weight: 700; color: var(--purple); margin-bottom: 4px; font-size: 11px; }
+    .next-steps ol { padding-left: 16px; }
+    .next-steps li { margin-bottom: 2px; }
+
+    /* Timeout next-steps */
+    .timeout-steps { background: #2d1010; border: 1px solid #6b2020; border-radius: 5px; padding: 8px 10px; margin-top: 8px; font-size: 11px; color: #fca5a5; line-height: 1.6; }
+    .timeout-steps .ns-title { font-weight: 700; color: #fca5a5; margin-bottom: 4px; }
+    .timeout-steps ol { padding-left: 16px; }
+    .retry-btn { margin-top: 8px; width: 100%; padding: 6px; border-radius: 5px; border: 1px solid var(--orange); background: #2d1f10; color: var(--orange); font-size: 12px; font-weight: 600; cursor: pointer; }
+    .retry-btn:hover { background: #3d2a15; }
+
+    /* Supervisor actions */
+    .sup-actions { margin-top: 9px; display: flex; gap: 7px; }
+    .btn-approve { flex:1; padding:6px; border-radius:5px; border:1px solid var(--green); background:#15272d; color:var(--green); font-size:12px; font-weight:600; cursor:pointer; }
+    .btn-reject  { flex:1; padding:6px; border-radius:5px; border:1px solid var(--red);   background:#2d1515; color:var(--red);   font-size:12px; font-weight:600; cursor:pointer; }
+    .btn-approve:hover { background:#1d3830; } .btn-reject:hover { background:#3d1f1f; }
+    .sup-hint { margin-top:7px; font-size:11px; color:var(--muted); }
+
+    /* Queue counter */
+    .tag { display: inline-block; background: var(--border); color: var(--muted); border-radius: 3px; padding: 1px 6px; font-size: 10px; font-weight: 700; margin-left: 5px; }
+    .tag.warn { background: #3d2d10; color: var(--yellow); }
+
+    /* Empty state */
+    .empty-state { text-align: center; color: var(--muted); padding: 40px 16px; font-size: 12px; line-height: 1.8; }
+    .empty-icon { font-size: 28px; margin-bottom: 8px; }
+
+    /* ── Telemetry panel ── */
+    .telem-entry { border-left: 2px solid var(--border); padding: 5px 0 5px 11px; margin-bottom: 7px; position: relative; }
+    .telem-entry::before { content:''; position:absolute; left:-5px; top:9px; width:8px; height:8px; border-radius:50%; background:var(--muted); }
+    .telem-entry.ev-received::before   { background: var(--teal);   }
+    .telem-entry.ev-queued::before     { background: var(--yellow); }
+    .telem-entry.ev-dispatched::before { background: var(--purple); }
+    .telem-entry.ev-executing::before  { background: var(--orange); }
+    .telem-entry.ev-completed::before  { background: var(--green);  }
+    .telem-entry.ev-failed::before     { background: var(--red);    }
+    .telem-entry.ev-timeout::before    { background: #fca5a5;       }
+    .telem-entry.ev-blocked::before    { background: var(--yellow); }
+    .telem-entry.ev-conflict::before   { background: var(--orange); }
+    .telem-entry.ev-approved::before   { background: var(--purple); }
+    .telem-entry.ev-rejected::before   { background: var(--red);    }
+    .telem-entry.ev-retry::before      { background: var(--teal);   }
+    .telem-time { font-size: 10px; color: var(--muted); margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+    .telem-body { font-size: 12px; line-height: 1.45; }
+    .telem-kv   { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .kv { background: var(--border); border-radius: 3px; padding: 1px 6px; font-size: 10px; color: var(--muted); font-family: monospace; }
+    .kv-highlight { color: var(--text); }
+
+    .raw-toggle { font-size: 11px; color: var(--accent); cursor: pointer; float: right; margin-top: -2px; }
+    .raw-pre { background: #0d0f18; border: 1px solid var(--border); border-radius: 5px; padding: 8px; font-size: 10px; font-family: monospace; color: var(--muted); white-space: pre-wrap; word-break: break-all; margin-top: 6px; display: none; max-height: 160px; overflow-y: auto; }
+    .raw-pre.open { display: block; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🤖 Acme Robotics — FleetOps Command Lifecycle</h1>
+  <div class="hdr-right">
+    <span class="peak-indicator" id="peak-indicator">⚡ PEAK LOAD ACTIVE</span>
+    <button class="peak-btn" id="peak-btn" onclick="togglePeakLoad()">Simulate Peak Load</button>
+    <span class="badge-sandbox">SANDBOX · DO NOT MERGE</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── LEFT: Submit ── -->
+  <div class="panel">
+    <div class="panel-header">⚡ Submit Command</div>
+    <div class="panel-body">
+
+      <div class="form-group">
+        <label>OPERATOR</label>
+        <div id="op-list"></div>
+      </div>
+
+      <hr class="divider" />
+
+      <div id="form-alert"></div>
+
+      <div class="form-group">
+        <label>ROBOT</label>
+        <select id="robot-select"></select>
+      </div>
+      <div class="form-group">
+        <label>ROUTE OVERRIDE</label>
+        <input type="text" id="route-input" placeholder="e.g. Dock-A → Bay-7" />
+      </div>
+
+      <button class="btn btn-primary" onclick="submitCommand()">Submit Route Command</button>
+      <button class="btn btn-secondary" onclick="resetAll()">Reset Demo</button>
+
+      <hr class="divider" />
+
+      <div class="config-section">CONFIG</div>
+      <div class="config-row">
+        <label>Latency warn (ms)</label>
+        <input type="number" id="cfg-warn" value="5000" min="500" step="500" title="Show latency warning after this many ms in QUEUED state" />
+      </div>
+      <div class="config-row">
+        <label>Queue timeout (ms)</label>
+        <input type="number" id="cfg-timeout" value="15000" min="3000" step="1000" title="Transition to TIMEOUT after this many ms in QUEUED state" />
+      </div>
+      <div class="config-row">
+        <label>Duplicate window (ms)</label>
+        <input type="number" id="cfg-dup" value="10000" min="1000" step="1000" title="Block re-submission for same operator+robot within this window" />
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6;">
+        <b>Peak Load</b> inflates queue wait times (×5) to simulate shift-change congestion.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CENTER: Live Queue ── -->
+  <div class="panel">
+    <div class="panel-header">
+      📋 Command Queue
+      <span class="tag" id="active-count">0 active</span>
+      <span class="tag warn" id="warn-count" style="display:none"></span>
+    </div>
+    <div class="panel-body" id="queue-panel">
+      <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        No commands submitted yet.<br/>Select an operator and submit a route command.<br/><br/>
+        <span style="font-size:11px;">Enable <b>Simulate Peak Load</b> to reproduce shift-change congestion.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: Telemetry ── -->
+  <div class="panel">
+    <div class="panel-header">
+      🔬 Telemetry &amp; Audit
+      <span class="raw-toggle" onclick="toggleAllRaw()" id="raw-toggle-lbl">show raw ▾</span>
+    </div>
+    <div class="panel-body" id="telem-panel">
+      <div class="empty-state">
+        <div class="empty-icon">📡</div>
+        Structured telemetry events will appear here.<br/>Each entry is suitable for RCA and account-team communication.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const OPERATORS = [
+  { id: 'op-1', name: 'Aoife Murphy',  role: 'operator'   },
+  { id: 'op-2', name: 'Carlos Reyes', role: 'operator'   },
+  { id: 'op-3', name: 'Sarah Chen',   role: 'supervisor' },
+];
+const ROBOTS = ['R-01 Alpha', 'R-02 Bravo', 'R-03 Charlie', 'R-04 Delta'];
+
+// State machine
+const STATES = ['received', 'queued', 'dispatched', 'executing', 'completed', 'failed', 'timeout', 'conflict'];
+const TERMINAL = new Set(['completed', 'failed', 'timeout']);
+const ACTIVE_STATES = new Set(['received', 'queued', 'dispatched', 'executing', 'conflict']);
+
+// Base timings (ms), before peak-load multiplier
+const T_RECEIVED_TO_QUEUED   = 350;
+const T_DISPATCHED_DELAY     = () => rand(400, 900);
+const T_EXECUTING_DELAY      = () => rand(1500, 4000);
+const T_QUEUED_BASE          = () => rand(1200, 6500); // normal queue wait
+const T_QUEUED_PEAK          = () => rand(8000, 22000); // peak-load queue wait
+
+// Failure probability
+const FAIL_CHANCE = 0.1;
+
+// ── App State ──────────────────────────────────────────────────────────────
+let selectedOpId = OPERATORS[0].id;
+let commands = [];
+let telemLog = [];
+let cmdSeq = 1;
+let peakLoad = false;
+let rawMode = false;
+const lastSubmit = {}; // dupKey → timestamp
+const activeRobotCmd = {}; // robotId → cmdId (queued/dispatched/executing)
+const queuedTimers = {}; // cmdId → {enteredQueued: ms, warnTimer, timeoutTimer, dispatchTimer}
+
+const $ = id => document.getElementById(id);
+const rand = (lo, hi) => Math.floor(Math.random() * (hi - lo + 1)) + lo;
+const now = () => Date.now();
+const ts = () => new Date().toLocaleTimeString('en-IE', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const tsMs = () => new Date().toLocaleTimeString('en-IE', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + String(Date.now() % 1000).padStart(3,'0');
+const cid = cmd => `CMD-${String(cmd.seq).padStart(3,'0')}`;
+const opById = id => OPERATORS.find(o => o.id === id);
+const cfg = {
+  warnMs:    () => parseInt($('cfg-warn').value)    || 5000,
+  timeoutMs: () => parseInt($('cfg-timeout').value) || 15000,
+  dupMs:     () => parseInt($('cfg-dup').value)     || 10000,
+};
+
+// ── Operators / Robots ─────────────────────────────────────────────────────
+function renderOperators() {
+  const el = $('op-list'); el.innerHTML = '';
+  OPERATORS.forEach(op => {
+    const d = document.createElement('div');
+    d.className = 'op-card' + (op.id === selectedOpId ? ' active' : '');
+    d.innerHTML = `<div class="op-name">${op.name}</div><span class="op-role role-${op.role}">${op.role === 'supervisor' ? '👑 Supervisor' : '🔧 Operator'}</span>`;
+    d.onclick = () => { selectedOpId = op.id; renderOperators(); clearAlert(); };
+    el.appendChild(d);
+  });
+}
+function renderRobots() {
+  $('robot-select').innerHTML = ROBOTS.map(r => `<option value="${r}">${r}</option>`).join('');
+}
+
+// ── Alert helpers ──────────────────────────────────────────────────────────
+const setAlert = (type, msg) => { $('form-alert').innerHTML = `<div class="alert alert-${type}">${msg}</div>`; };
+const clearAlert = () => { $('form-alert').innerHTML = ''; };
+
+// ── Submit ─────────────────────────────────────────────────────────────────
+function submitCommand() {
+  clearAlert();
+  const op    = opById(selectedOpId);
+  const robot = $('robot-select').value;
+  const route = $('route-input').value.trim() || `Route-${rand(1,99)}`;
+  const dupKey = `${op.id}:${robot}`;
+  const n = now();
+
+  // Duplicate guard
+  if (lastSubmit[dupKey] && (n - lastSubmit[dupKey]) < cfg.dupMs()) {
+    const rem = Math.ceil((cfg.dupMs() - (n - lastSubmit[dupKey])) / 1000);
+    setAlert('error', `⛔ <b>Duplicate command blocked.</b> A command for <b>${robot}</b> was already submitted by <b>${op.name}</b>. Wait <b>${rem}s</b> before resubmitting.`);
+    addTelem(null, 'blocked', op.name, robot, route, { reason: 'duplicate_guard', cooldown_remaining_s: rem });
+    return;
+  }
+
+  // Conflict check
+  const conflictCmdId = activeRobotCmd[robot];
+  if (conflictCmdId !== undefined) {
+    const cc = commands.find(c => c.seq === conflictCmdId);
+    if (cc && !TERMINAL.has(cc.state)) {
+      if (op.role !== 'supervisor') {
+        setAlert('warn', `⚠️ <b>Route conflict detected.</b> <b>${robot}</b> already has an active command (${cid(cc)}) submitted by <b>${cc.opName}</b>. A supervisor can override this.`);
+        addTelem(null, 'conflict', op.name, robot, route, { reason: 'active_command_conflict', active_cmd: cid(cc), active_op: cc.opName });
+        return;
+      }
+      // Supervisor initiates override
+      setAlert('info', `👑 <b>Supervisor override pending.</b> Conflicting command ${cid(cc)} by <b>${cc.opName}</b> will be superseded if you approve.`);
+      createCmd(op, robot, route, dupKey, 'conflict', cc.seq);
+      return;
+    }
+  }
+
+  createCmd(op, robot, route, dupKey, 'received', null);
+}
+
+function createCmd(op, robot, route, dupKey, initState, conflictWith) {
+  const cmd = {
+    seq: cmdSeq++,
+    opId: op.id,
+    opName: op.name,
+    robot,
+    route,
+    submittedAt: now(),
+    state: initState,
+    conflictWith,
+    stateEnteredAt: now(),
+    failReason: null,
+  };
+  commands.push(cmd);
+  lastSubmit[dupKey] = now();
+
+  addTelem(cmd, initState, op.name, robot, route, { submitted_at: tsMs() });
+
+  if (initState === 'received') {
+    if (!cmd.conflictWith) activeRobotCmd[robot] = cmd.seq;
+    scheduleReceived(cmd);
+  }
+
+  renderQueue();
+  renderTelem();
+  updateCounts();
+}
+
+// ── State machine ──────────────────────────────────────────────────────────
+function scheduleReceived(cmd) {
+  // RECEIVED → QUEUED
+  setTimeout(() => {
+    if (cmd.state !== 'received') return;
+    transition(cmd, 'queued');
+    scheduleQueued(cmd);
+  }, T_RECEIVED_TO_QUEUED);
+}
+
+function scheduleQueued(cmd) {
+  const enteredAt = now();
+  queuedTimers[cmd.seq] = { enteredAt };
+
+  const queueWait = peakLoad ? T_QUEUED_PEAK() : T_QUEUED_BASE();
+  const warnMs = cfg.warnMs();
+  const timeoutMs = cfg.timeoutMs();
+
+  // Schedule dispatch (may be overridden by timeout)
+  const dispatchTimer = setTimeout(() => {
+    if (cmd.state !== 'queued') return;
+    transition(cmd, 'dispatched');
+    delete queuedTimers[cmd.seq];
+    scheduleDispatched(cmd);
+  }, queueWait);
+
+  // Latency warning
+  const warnTimer = setTimeout(() => {
+    if (cmd.state !== 'queued') return;
+    addTelem(cmd, 'latency_warn', 'System', cmd.robot, cmd.route, {
+      time_in_queue_ms: now() - enteredAt,
+      threshold_ms: warnMs,
+      peak_load: peakLoad,
+    });
+    renderQueue(); // refresh card to show banner
+    renderTelem();
+    updateCounts();
+  }, warnMs);
+
+  // Queue timeout
+  const timeoutTimer = setTimeout(() => {
+    if (cmd.state !== 'queued') return;
+    clearTimeout(dispatchTimer);
+    if (activeRobotCmd[cmd.robot] === cmd.seq) delete activeRobotCmd[cmd.robot];
+    transition(cmd, 'timeout', { time_in_queue_ms: now() - enteredAt, threshold_ms: timeoutMs });
+    delete queuedTimers[cmd.seq];
+  }, timeoutMs);
+
+  queuedTimers[cmd.seq] = { enteredAt, warnTimer, timeoutTimer, dispatchTimer };
+}
+
+function scheduleDispatched(cmd) {
+  setTimeout(() => {
+    if (cmd.state !== 'dispatched') return;
+    transition(cmd, 'executing');
+    scheduleExecuting(cmd);
+  }, T_DISPATCHED_DELAY());
+}
+
+function scheduleExecuting(cmd) {
+  setTimeout(() => {
+    if (cmd.state !== 'executing') return;
+    const success = Math.random() > FAIL_CHANCE;
+    if (success) {
+      transition(cmd, 'completed');
+      if (activeRobotCmd[cmd.robot] === cmd.seq) delete activeRobotCmd[cmd.robot];
+    } else {
+      const reasons = [
+        'Robot navigation error: obstacle detected on path',
+        'Command rejected: robot entered safe-stop mode',
+        'Execution timeout: robot did not acknowledge waypoint',
+        'Hardware fault: motor encoder mismatch on R-axis',
+      ];
+      cmd.failReason = reasons[rand(0, reasons.length - 1)];
+      transition(cmd, 'failed', { reason: cmd.failReason });
+      if (activeRobotCmd[cmd.robot] === cmd.seq) delete activeRobotCmd[cmd.robot];
+    }
+  }, T_EXECUTING_DELAY());
+}
+
+function transition(cmd, newState, extra = {}) {
+  const dur = now() - cmd.stateEnteredAt;
+  const prev = cmd.state;
+  cmd.state = newState;
+  cmd.stateEnteredAt = now();
+  addTelem(cmd, newState, cmd.opName, cmd.robot, cmd.route, {
+    prev_state: prev,
+    duration_in_prev_ms: dur,
+    ...extra,
+  });
+  renderQueue();
+  renderTelem();
+  updateCounts();
+}
+
+// ── Supervisor override ────────────────────────────────────────────────────
+function supApprove(seq) {
+  const cmd = commands.find(c => c.seq === seq);
+  if (!cmd || cmd.state !== 'conflict') return;
+  const cc = commands.find(c => c.seq === cmd.conflictWith);
+  if (cc && !TERMINAL.has(cc.state)) {
+    // Cancel queued timers for conflicting command
+    if (queuedTimers[cc.seq]) {
+      const { warnTimer, timeoutTimer, dispatchTimer } = queuedTimers[cc.seq];
+      clearTimeout(warnTimer); clearTimeout(timeoutTimer); clearTimeout(dispatchTimer);
+      delete queuedTimers[cc.seq];
+    }
+    cc.state = 'failed';
+    cc.failReason = `Superseded by supervisor override from ${cmd.opName}`;
+    cc.stateEnteredAt = now();
+    if (activeRobotCmd[cc.robot] === cc.seq) delete activeRobotCmd[cc.robot];
+    addTelem(cc, 'failed', 'System', cc.robot, cc.route, { reason: cc.failReason });
+  }
+  cmd.conflictWith = null;
+  activeRobotCmd[cmd.robot] = cmd.seq;
+  lastSubmit[`${cmd.opId}:${cmd.robot}`] = now();
+  addTelem(cmd, 'approved', cmd.opName, cmd.robot, cmd.route, { action: 'supervisor_override_approved' });
+  cmd.state = 'received';
+  cmd.stateEnteredAt = now();
+  scheduleReceived(cmd);
+  clearAlert();
+  renderQueue(); renderTelem(); updateCounts();
+}
+
+function supReject(seq) {
+  const cmd = commands.find(c => c.seq === seq);
+  if (!cmd || cmd.state !== 'conflict') return;
+  cmd.failReason = 'Supervisor override rejected';
+  addTelem(cmd, 'rejected', cmd.opName, cmd.robot, cmd.route, { action: 'supervisor_override_rejected' });
+  cmd.state = 'failed'; cmd.stateEnteredAt = now();
+  renderQueue(); renderTelem(); updateCounts();
+}
+
+// ── Retry (timed-out command) ──────────────────────────────────────────────
+function retryCmd(seq) {
+  const cmd = commands.find(c => c.seq === seq);
+  if (!cmd || cmd.state !== 'timeout') return;
+  addTelem(cmd, 'retry', cmd.opName, cmd.robot, cmd.route, { note: 'Manual retry after timeout' });
+  cmd.state = 'received'; cmd.stateEnteredAt = now();
+  activeRobotCmd[cmd.robot] = cmd.seq;
+  lastSubmit[`${cmd.opId}:${cmd.robot}`] = now();
+  scheduleReceived(cmd);
+  renderQueue(); renderTelem(); updateCounts();
+}
+
+// ── Live ticker (time-in-queue counters) ───────────────────────────────────
+setInterval(() => {
+  // Check if any command is in queued state — if so, re-render to update timers
+  const hasQueued = commands.some(c => c.state === 'queued');
+  if (hasQueued) { renderQueue(); updateCounts(); }
+}, 1000);
+
+// ── Render: queue ──────────────────────────────────────────────────────────
+const STATUS_LABEL = {
+  received:   'RECEIVED',
+  queued:     'QUEUED',
+  dispatched: 'DISPATCHED',
+  executing:  'EXECUTING',
+  completed:  'COMPLETED',
+  failed:     'FAILED',
+  timeout:    'TIMED OUT',
+  conflict:   'CONFLICT — PENDING',
+};
+
+function queuedElapsedMs(cmd) {
+  if (cmd.state !== 'queued') return 0;
+  const t = queuedTimers[cmd.seq];
+  return t ? now() - t.enteredAt : 0;
+}
+
+function renderQueue() {
+  const panel = $('queue-panel');
+  if (!commands.length) {
+    panel.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div>No commands submitted yet.<br/>Select an operator and submit a route command.<br/><br/><span style="font-size:11px;">Enable <b>Simulate Peak Load</b> to reproduce shift-change congestion.</span></div>`;
+    return;
+  }
+
+  const cur = opById(selectedOpId);
+  panel.innerHTML = [...commands].reverse().map(cmd => {
+    const st = cmd.state;
+    const elapsed = queuedElapsedMs(cmd);
+    const warnThresh = cfg.warnMs();
+    const isLatencyWarn = (st === 'queued') && elapsed >= warnThresh;
+    const op = opById(cmd.opId);
+    const submittedStr = new Date(cmd.submittedAt).toLocaleTimeString('en-IE', { hour12: false });
+
+    let latencyRow = '';
+    if (st === 'queued') {
+      const secs = Math.floor(elapsed / 1000);
+      const cls  = elapsed >= cfg.warnMs() * 1.5 ? 'danger' : elapsed >= warnThresh ? 'warn' : '';
+      latencyRow = `<div class="latency-row"><span class="latency-timer ${cls}">⏱ ${secs}s in queue</span></div>`;
+    } else if (st === 'dispatched') {
+      const secs = Math.floor((now() - cmd.stateEnteredAt) / 1000);
+      latencyRow = `<div class="latency-row"><span class="latency-timer">⚡ dispatching — ${secs}s</span></div>`;
+    } else if (st === 'executing') {
+      const secs = Math.floor((now() - cmd.stateEnteredAt) / 1000);
+      latencyRow = `<div class="latency-row"><span class="latency-timer" style="color:var(--orange)">🤖 executing — ${secs}s</span></div>`;
+    }
+
+    let latencyBanner = '';
+    if (isLatencyWarn) {
+      latencyBanner = `<div class="latency-banner">⚠️ <b>Latency warning:</b> This command has been queued for <b>${Math.floor(elapsed/1000)}s</b> (threshold: ${warnThresh/1000}s). ${peakLoad ? 'System is under peak load.' : 'Check robot controller availability.'}</div>`;
+    }
+
+    let extras = '';
+    if (st === 'failed') {
+      const reason = cmd.failReason || 'Unknown error';
+      extras = `<div class="next-steps"><div class="ns-title">⚠️ Command failed — recommended next steps</div>
+        <div style="color:#ddb8f0;margin-bottom:6px;font-size:11px;"><b>Reason:</b> ${reason}</div>
+        <ol><li>Verify robot <b>${cmd.robot}</b> is online and not in safe-stop mode.</li>
+        <li>Check for obstacle reports or hardware faults in the robot dashboard.</li>
+        <li>If the fault persists, escalate to a supervisor and log a support ticket.</li>
+        <li>Retry the route command only after the underlying fault is resolved.</li></ol></div>`;
+    } else if (st === 'timeout') {
+      extras = `<div class="timeout-steps"><div class="ns-title">🕐 Command timed out in queue</div>
+        <ol><li>The robot controller did not pick up this command within the timeout window (${cfg.timeoutMs()/1000}s).</li>
+        <li>Check whether the queue is under peak load and controller capacity is saturated.</li>
+        <li>Verify <b>${cmd.robot}</b> is online and connected.</li>
+        <li>Click <b>Retry</b> to resubmit when ready, or contact a supervisor.</li></ol></div>
+        <button class="retry-btn" onclick="retryCmd(${cmd.seq})">🔄 Retry Command</button>`;
+    } else if (st === 'conflict') {
+      if (cur?.role === 'supervisor') {
+        extras = `<div class="sup-actions"><button class="btn-approve" onclick="supApprove(${cmd.seq})">✓ Approve Override</button><button class="btn-reject" onclick="supReject(${cmd.seq})">✕ Reject Override</button></div>`;
+      } else {
+        extras = `<p class="sup-hint">Switch to a Supervisor to approve or reject this override.</p>`;
+      }
+    }
+
+    return `<div class="cmd-card ${isLatencyWarn?'latency-warn':''} ${st==='timeout'?'timed-out':''}">
+      <div class="cmd-top">
+        <div>
+          <div class="cmd-title">${cid(cmd)} — ${cmd.route}</div>
+          <div class="cmd-meta">${op?.role==='supervisor'?'👑 ':''}${cmd.opName} · ${cmd.robot} · ${submittedStr}</div>
+        </div>
+        <span class="pill pill-${st}">${STATUS_LABEL[st]}</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill fill-${st}"></div></div>
+      ${latencyRow}
+      ${latencyBanner}
+      ${extras}
+    </div>`;
+  }).join('');
+}
+
+// ── Render: telemetry ──────────────────────────────────────────────────────
+function addTelem(cmd, event, actor, robot, route, meta = {}) {
+  telemLog.unshift({
+    id: telemLog.length,
+    time: tsMs(),
+    commandId: cmd ? cid(cmd) : null,
+    event,
+    actor,
+    robot,
+    route,
+    meta,
+  });
+}
+
+function renderTelem() {
+  const panel = $('telem-panel');
+  if (!telemLog.length) {
+    panel.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div>Structured telemetry events will appear here.<br/>Each entry is suitable for RCA and account-team communication.</div>`;
+    return;
+  }
+  panel.innerHTML = telemLog.map((e, i) => {
+    const metaKeys = Object.entries(e.meta || {});
+    const kvHtml = metaKeys.length
+      ? `<div class="telem-kv">${metaKeys.map(([k,v]) => `<span class="kv ${['reason','error'].includes(k)?'kv-highlight':''}">${k}=${JSON.stringify(v)}</span>`).join('')}</div>`
+      : '';
+    const raw = JSON.stringify({ commandId: e.commandId, event: e.event, actor: e.actor, robot: e.robot, route: e.route, ...e.meta }, null, 2);
+    return `<div class="telem-entry ev-${e.event}">
+      <div class="telem-time">${e.time}${e.commandId ? ' · ' + e.commandId : ''}</div>
+      <div class="telem-body"><b>${e.actor}</b> — <b style="color:var(--text)">${e.event.toUpperCase()}</b> · ${e.robot ?? ''} · ${e.route ?? ''}${kvHtml}</div>
+      <pre class="raw-pre ${rawMode?'open':''}" id="raw-${i}">${raw}</pre>
+    </div>`;
+  }).join('');
+}
+
+function toggleAllRaw() {
+  rawMode = !rawMode;
+  $('raw-toggle-lbl').textContent = rawMode ? 'hide raw ▴' : 'show raw ▾';
+  renderTelem();
+}
+
+// ── Counts ─────────────────────────────────────────────────────────────────
+function updateCounts() {
+  const active = commands.filter(c => ACTIVE_STATES.has(c.state));
+  const queued = commands.filter(c => c.state === 'queued');
+  const warnCount = queued.filter(c => queuedElapsedMs(c) >= cfg.warnMs()).length;
+
+  $('active-count').textContent = `${active.length} active`;
+
+  const warnEl = $('warn-count');
+  if (warnCount > 0) {
+    warnEl.textContent = `${warnCount} latency warn`;
+    warnEl.style.display = 'inline-block';
+  } else {
+    warnEl.style.display = 'none';
+  }
+}
+
+// ── Peak load toggle ───────────────────────────────────────────────────────
+function togglePeakLoad() {
+  peakLoad = !peakLoad;
+  $('peak-btn').classList.toggle('active', peakLoad);
+  $('peak-indicator').classList.toggle('visible', peakLoad);
+}
+
+// ── Reset ──────────────────────────────────────────────────────────────────
+function resetAll() {
+  // Clear all pending timers
+  Object.values(queuedTimers).forEach(t => {
+    clearTimeout(t.warnTimer);
+    clearTimeout(t.timeoutTimer);
+    clearTimeout(t.dispatchTimer);
+  });
+  Object.keys(queuedTimers).forEach(k => delete queuedTimers[k]);
+  Object.keys(lastSubmit).forEach(k => delete lastSubmit[k]);
+  Object.keys(activeRobotCmd).forEach(k => delete activeRobotCmd[k]);
+
+  commands = [];
+  telemLog = [];
+  cmdSeq = 1;
+  $('route-input').value = '';
+  clearAlert();
+  renderQueue();
+  renderTelem();
+  updateCounts();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+renderOperators();
+renderRobots();
+updateCounts();
+</script>
+</body>
+</html>

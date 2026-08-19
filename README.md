@@ -29,7 +29,8 @@ Demonstrates the full five-state command lifecycle (Received → Queued → Disp
 ### 3. Multi-Site Fleet Visibility Dashboard
 **Path:** `prototypes/multisite-fleet-dashboard/index.html`
 **PRD:** Multi-site fleet visibility and incident detection
-**Status:** Needs Review
+**PR:** [#3](https://github.com/PLavelle150/Acme-Test---PL/pull/3)
+**Status:** Done
 
 Demonstrates a unified multi-site fleet dashboard for enterprise operators managing multiple sites (Pacific Warehousing — Seattle/Oakland/LA; Meridian Logistics — Phoenix/Atlanta/Dallas):
 
@@ -40,13 +41,3 @@ Demonstrates a unified multi-site fleet dashboard for enterprise operators manag
 - **Drill-down drawer** — click any site to view individual robot statuses, incident log with severity, site KPIs, and coverage notes
 - **CSV report export** — one-click export of full site + robot data as a dated CSV file (eliminates manual reporting)
 - **Permissions model** — role selector switches between Admin (all 6 sites), Pacific Operator (3 sites), and Meridian Operator (3 sites)
-
-#### Acceptance criteria checklist
-- [ ] All sites visible in one dashboard with fleet status and health indicators
-- [ ] Cross-site KPI rollups (fleet availability %, active incidents, at-risk sites) shown at top
-- [ ] Filter by status and site search works correctly
-- [ ] Incident and at-risk sites are clearly surfaced with banners and colour-coded cards
-- [ ] Drill-down into a site shows fleet detail, robot list, and incident log
-- [ ] Export button produces a downloadable CSV shift report
-- [ ] Permissions model: Admin sees all 6 sites; Pacific and Meridian operators see only their own sites
-- [ ] No auto-merge — reviewer must sign off before Done
